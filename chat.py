@@ -526,10 +526,13 @@ Answer using only the retrieved information above.
         output = model.generate(
             **inputs,
             max_new_tokens=800,
-            do_sample=False,
-            temperature=None,
-            top_p=None,
-            top_k=None,
+            # Qwen3 warns that greedy decoding can cause endless repetition.
+            # Use its recommended sampling settings for non-thinking mode.
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.8,
+            top_k=20,
+            min_p=0.0,
         )
 
     generated = output[
