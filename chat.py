@@ -1,7 +1,14 @@
+import os
 import pickle
 import re
+import sys
 from collections import Counter
 from pathlib import Path
+
+# Avoid a native threading crash observed during checkpoint loading on macOS.
+# Set this before importing FAISS, NumPy, or PyTorch; allow explicit overrides.
+if sys.platform == "darwin":
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import faiss
 import numpy as np
@@ -151,13 +158,17 @@ tokenizer = AutoTokenizer.from_pretrained(
     str(QWEN_MODEL_PATH)
 )
 
-model = AutoModelForCausalLM.from_pretrained(
-    str(QWEN_MODEL_PATH),
-    torch_dtype="auto",
-    device_map="auto",
+device = torch.device(
+    "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
-print("Qwen loaded.")
+model = AutoModelForCausalLM.from_pretrained(
+    str(QWEN_MODEL_PATH),
+    torch_dtype=torch.float16 if device.type == "mps" else torch.float32,
+).to(device)
+model.eval()
+
+print(f"Qwen loaded on {device}.")
 
 
 # =====================================================
