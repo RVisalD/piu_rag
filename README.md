@@ -12,7 +12,7 @@ On macOS or Linux:
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install torch numpy faiss-cpu sentence-transformers "transformers>=4.51.0,<5" accelerate huggingface_hub
+python -m pip install -r requirements.txt
 ```
 
 On Windows PowerShell, create and activate the environment with the following commands, then run the same `python -m pip` commands above:
@@ -96,6 +96,53 @@ For later sessions on macOS or Linux:
 ```bash
 source .venv/bin/activate
 python chat.py
+```
+
+## Run as a FastAPI service
+
+The API reuses `chat.py` and loads its models once during server startup. All dependencies for indexing, the chatbot, the API, and API tests are listed in the central `requirements.txt`. Use the same Python environment for the chatbot and API:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m uvicorn api:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Wait for startup to finish, then open http://127.0.0.1:8000/docs for interactive API documentation. `GET /health` reports readiness and the model's device.
+
+Send a question:
+
+```bash
+curl http://127.0.0.1:8000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Tell me about computer science","history":[]}'
+```
+
+The response includes `answer`, `sources`, and `history`. Send the returned `history` unchanged with the next question to continue that conversation. For example:
+
+```python
+import requests
+
+history = []
+for question in ["Tell me about computer science", "Who is its head?"]:
+    response = requests.post(
+        "http://127.0.0.1:8000/chat",
+        json={"question": question, "history": history},
+        timeout=300,
+    )
+    response.raise_for_status()
+    result = response.json()
+    print(result["answer"])
+    history = result["history"]
+```
+
+Reset by sending an empty history. Each client manages its own history; the server does not store conversations. History accepts up to four complete user/assistant exchanges, and questions are limited to 2,000 characters. Clients cannot supply system messages. The service handles one generation at a time; concurrent chat requests receive HTTP 503 with a `Retry-After` header. Retry later using the same history. FastAPI exposes the existing generation behavior; it does not itself make the model faster.
+
+Use one worker to avoid loading multiple copies of Qwen into memory. This configuration serves local clients without authentication. Model loading is handled through FastAPI's [lifespan mechanism](https://fastapi.tiangolo.com/advanced/events/).
+
+API tests use a fake engine. Their `httpx` dependency is included in `requirements.txt`:
+
+```bash
+python3 -m unittest discover -s tests
 ```
 
 ## Configuration

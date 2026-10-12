@@ -54,7 +54,7 @@ EMBEDDING_MODEL = (
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-TOP_K = 5
+TOP_K = 3
 
 # Start permissive.
 # Tune this after testing your real questions.
