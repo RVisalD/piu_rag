@@ -64,6 +64,25 @@ MIN_SCORE = 0.30
 # previous chunk + matched chunk + next chunk
 NEIGHBOR_WINDOW = 1
 
+# Keep the last four complete exchanges in memory for this session.
+MAX_HISTORY_TURNS = 4
+
+
+def build_search_question(question, history):
+    """Add recent user topics to referential follow-ups without another LLM call."""
+    follow_up = re.search(
+        r"\b(it|its|they|them|their|that|those|these|this|there|he|him|his|she|her|hers)\b"
+        r"|^(and\b|what about\b|how about\b|tell me more\b|more details\b)",
+        question.strip(),
+        re.IGNORECASE,
+    )
+    if not history or not follow_up:
+        return question
+    previous_questions = [
+        message["content"] for message in history if message["role"] == "user"
+    ][-2:]
+    return "\n".join(previous_questions + [question])
+
 
 # =====================================================
 # Load embedding model
@@ -444,11 +463,13 @@ Information:
 # Generate
 # =====================================================
 
-def answer_question(question):
+def answer_question(question, history=None):
+
+    history = (history or [])[-2 * MAX_HISTORY_TURNS:]
 
     # 1. Search
     results = retrieve(
-        question
+        build_search_question(question, history)
     )
 
     if not results:
@@ -490,11 +511,15 @@ Rules:
   available in the context.
 8. Do not omit semesters unless the user specifically asks for only
   certain semesters.
-9. Do not mention embeddings, FAISS, vector databases,
+9. If there are multiple points to the answer, present them as a numbered list or bullet points.
+10. Do not mention embeddings, FAISS, vector databases,
    retrieval scores, chunks, or internal implementation.
-10. If multiple retrieved sources conflict, do not choose
+11. If multiple retrieved sources conflict, do not choose
     one by guessing. State that the available information
    appears inconsistent.
+12. Use conversation history to understand follow-up questions.
+    Previous assistant answers are not verified sources. Ground university
+    facts in the retrieved information for the current turn.
 """.strip()
 
     user_prompt = f"""
@@ -514,6 +539,7 @@ Answer using only the retrieved information above.
             "role": "system",
             "content": system_prompt,
         },
+        *history,
         {
             "role": "user",
             "content": user_prompt,
@@ -573,10 +599,18 @@ def main():
     print("Paragon RAG Chatbot")
     print("============================")
     print("Type 'exit' or 'quit' to stop.")
+    print("Type 'reset' to clear the conversation, or 'debug' to view sources.")
+
+    history = []
+    results = []
 
     while True:
 
-        question = input("\nYou: ").strip()
+        try:
+            question = input("\nYou: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
 
         if not question:
             continue
@@ -584,47 +618,34 @@ def main():
         if question.lower() in {"exit", "quit"}:
             break
 
-        answer, results = answer_question(question)
+        if question.lower() == "reset":
+            history.clear()
+            results = []
+            print("Conversation cleared.")
+            continue
 
-        print("\nAssistant:")
-        print(answer)
-
-        # -----------------------------------------
-        # Evaluation
-        # -----------------------------------------
-
-        satisfied = input(
-            "\nWas this answer satisfactory? (y/n): "
-        ).strip().lower()
-
-        if satisfied == "y":
-            print("✓ Answer marked as satisfactory.")
-
-        elif satisfied == "n":
-
-            reason = input(
-                "What was wrong with the answer? "
-            ).strip()
-
-            print("\n--- DEBUG INFORMATION ---")
-
+        if question.lower() == "debug":
             for number, result in enumerate(results, start=1):
-
                 print(
                     f"{number}. {result['title']}"
                     f" | chunk={result['chunk_id']}"
                     f" | semantic={result['semantic_score']:.3f}"
                     f" | lexical={result['lexical_score']:.3f}"
                 )
+            if not results:
+                print("No sources for the last answer.")
+            continue
 
-                if "context_chunk_ids" in result:
-                    print(
-                        "   context chunks:",
-                        result["context_chunk_ids"]
-                    )
+        answer, results = answer_question(question, history)
 
-            print("-------------------------")
-            print("Reason:", reason)
+        history.extend([
+            {"role": "user", "content": question},
+            {"role": "assistant", "content": answer},
+        ])
+        history = history[-2 * MAX_HISTORY_TURNS:]
+
+        print("\nAssistant:")
+        print(answer)
 
 if __name__ == "__main__":
     main()

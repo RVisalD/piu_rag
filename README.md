@@ -87,9 +87,9 @@ After the models load, enter a question at the `You:` prompt, for example:
 You: What programs does Paragon International University offer?
 ```
 
-Answers depend on the source information in your dataset. Each answer is followed by `Was this answer satisfactory? (y/n):`. Enter `y` to continue, or `n` to provide a reason and display retrieval debugging information. Feedback is printed in the terminal and is not saved to a file.
+Answers depend on the source information in your dataset. The chatbot remembers the last four exchanges during the current session, so you can ask follow-ups such as "Who is its head?" after asking about a department. For follow-ups containing references such as "it", "their", or "what about", retrieval includes the last two user questions. This is a lightweight heuristic and may not resolve every ambiguous follow-up.
 
-Type `exit` or `quit` at the `You:` prompt to stop. Each question is processed independently; the script does not include previous turns in the model prompt.
+Type `reset` to clear conversation history, `debug` to view the last answer's retrieved sources, or `exit` / `quit` to stop. History is held in memory and is not saved between runs. Previous answers help interpret the conversation; university facts must still come from the current retrieved sources.
 
 For later sessions on macOS or Linux:
 
@@ -110,6 +110,7 @@ Edit the constants in the scripts to adjust behavior:
 | `TOP_K` | `chat.py` | `5` | Maximum retrieved matches. |
 | `MIN_SCORE` | `chat.py` | `0.30` | Semantic threshold for candidates without lexical evidence. |
 | `NEIGHBOR_WINDOW` | `chat.py` | `1` | Include one preceding and one following chunk from the same document. |
+| `MAX_HISTORY_TURNS` | `chat.py` | `4` | Maximum complete conversation exchanges retained in memory. |
 
 ## Troubleshooting
 
