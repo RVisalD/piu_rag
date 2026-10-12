@@ -43,6 +43,13 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.calls[-1][1], [])
         self.assertEqual(self.loads, 1)
 
+    def test_chat_page(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers["content-type"])
+        self.assertIn("University assistant", response.text)
+        self.assertIn("fetch('/chat'", response.text)
+
     def test_history_limit(self):
         history = []
         for i in range(6):

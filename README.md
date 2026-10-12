@@ -107,7 +107,7 @@ python3 -m pip install -r requirements.txt
 python3 -m uvicorn api:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Wait for startup to finish, then open http://127.0.0.1:8000/docs for interactive API documentation. `GET /health` reports readiness and the model's device.
+Wait for startup to finish, then open http://127.0.0.1:8000/ for the browser chat interface, or http://127.0.0.1:8000/docs for interactive API documentation. The chat page sends questions to `/chat` and automatically sends the returned history with follow-ups. Use **New conversation** to reset. History stays in the current tab's memory and is cleared on refresh. `GET /health` reports readiness and the model's device.
 
 Send a question:
 

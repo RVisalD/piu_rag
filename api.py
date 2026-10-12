@@ -2,10 +2,12 @@
 
 import importlib
 from contextlib import asynccontextmanager
+from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Literal
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
 
@@ -57,6 +59,10 @@ def create_app(engine_loader=load_engine):
             app.state.engine = None
 
     app = FastAPI(title="PIU Conversational Chat API", lifespan=lifespan)
+
+    @app.get("/", response_class=FileResponse, include_in_schema=False)
+    def chat_page():
+        return FileResponse(Path(__file__).resolve().parent / "static" / "index.html")
 
     @app.get("/health")
     def health(request: Request):
