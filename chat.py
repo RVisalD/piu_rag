@@ -69,7 +69,7 @@ MAX_HISTORY_TURNS = 4
 
 
 def build_search_question(question, history):
-    """Add recent user topics to referential follow-ups without another LLM call."""
+    """Add recent conversation context to referential follow-ups without an LLM call."""
     follow_up = re.search(
         r"\b(it|its|they|them|their|that|those|these|this|there|he|him|his|she|her|hers)\b"
         r"|^(and\b|what about\b|how about\b|tell me more\b|more details\b)",
@@ -81,7 +81,11 @@ def build_search_question(question, history):
     previous_questions = [
         message["content"] for message in history if message["role"] == "user"
     ][-2:]
-    return "\n".join(previous_questions + [question])
+    previous_answer = next(
+        (message["content"] for message in reversed(history) if message["role"] == "assistant"),
+        "",
+    )
+    return "\n".join(previous_questions + [previous_answer, question])
 
 
 # =====================================================
@@ -204,8 +208,10 @@ def _tokens(text):
 # complement semantic FAISS retrieval.
 LEXICAL_DOCS = []
 DOC_FREQ = Counter()
+DOC_LENGTHS = []
+LEXICAL_POSTINGS = {}
 
-for chunk in chunks:
+for idx, chunk in enumerate(chunks):
     searchable = " ".join([
         chunk.get("title", ""),
         chunk.get("embedding_text", ""),
@@ -214,8 +220,10 @@ for chunk in chunks:
     toks = _tokens(searchable)
     counts = Counter(toks)
     LEXICAL_DOCS.append((toks, counts))
+    DOC_LENGTHS.append(max(len(toks), 1))
     for token in counts:
         DOC_FREQ[token] += 1
+        LEXICAL_POSTINGS.setdefault(token, []).append((idx, counts[token]))
 
 AVG_DOC_LEN = (
     sum(len(toks) for toks, _ in LEXICAL_DOCS) / max(len(LEXICAL_DOCS), 1)
@@ -227,25 +235,22 @@ def _bm25_scores(question):
     if not q_tokens:
         return {}
 
-    N = len(chunks)
     scores = {}
     k1 = 1.5
     b = 0.75
 
-    for idx, (tokens, counts) in enumerate(LEXICAL_DOCS):
-        dl = max(len(tokens), 1)
-        score = 0.0
-        for term in q_tokens:
-            tf = counts.get(term, 0)
-            if not tf:
-                continue
-            df = DOC_FREQ.get(term, 0)
-            # Positive BM25 IDF.
-            idf = np.log(1.0 + (N - df + 0.5) / (df + 0.5))
+    N = len(LEXICAL_DOCS)
+    for term in q_tokens:
+        postings = LEXICAL_POSTINGS.get(term, ())
+        if not postings:
+            continue
+        df = DOC_FREQ[term]
+        # Positive BM25 IDF.
+        idf = np.log(1.0 + (N - df + 0.5) / (df + 0.5))
+        for idx, tf in postings:
+            dl = DOC_LENGTHS[idx]
             denom = tf + k1 * (1 - b + b * dl / max(AVG_DOC_LEN, 1.0))
-            score += idf * (tf * (k1 + 1)) / denom
-        if score > 0:
-            scores[idx] = float(score)
+            scores[idx] = scores.get(idx, 0.0) + idf * (tf * (k1 + 1)) / denom
     return scores
 
 

@@ -15,19 +15,19 @@ BASE_DIR = Path(__file__).resolve().parent
 
 CHUNKS_FILE = (
     BASE_DIR
-    / "data"
+    / "../data"
     / "piu_chunks_improved.jsonl"
 )
 
 INDEX_FILE = (
     BASE_DIR
-    / "data"
+    / "../data"
     / "piu.index"
 )
 
 METADATA_FILE = (
     BASE_DIR
-    / "data"
+    / "../data"
     / "piu_chunks.pkl"
 )
 
