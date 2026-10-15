@@ -1,5 +1,11 @@
 /data/raw/
-/data/piu_chunks_improved.jsonl
+*.jsonl
+
+/data/curated/
+*.jsonl
+
+/data/curated/
+*.md
 
 /models/
 

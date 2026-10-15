@@ -11,23 +11,24 @@ from sentence_transformers import SentenceTransformer
 # Paths
 # =====================================================
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 CHUNKS_FILE = (
     BASE_DIR
-    / "../data"
-    / "piu_chunks_improved.jsonl"
+    / "data"
+    / "curated"
+    / "piu_chunks_clean.jsonl"
 )
 
 INDEX_FILE = (
     BASE_DIR
-    / "../data"
+    / "data"
     / "piu.index"
 )
 
 METADATA_FILE = (
     BASE_DIR
-    / "../data"
+    / "data"
     / "piu_chunks.pkl"
 )
 
