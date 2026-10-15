@@ -16,8 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CHUNKS_FILE = (
     BASE_DIR
     / "data"
-    / "curated"
-    / "piu_chunks_clean.jsonl"
+    / "piu_chunks_improved.jsonl"
 )
 
 INDEX_FILE = (

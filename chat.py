@@ -54,7 +54,7 @@ EMBEDDING_MODEL = (
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-TOP_K = 3
+TOP_K = 5
 EXPANDED_TOP_K = 6
 MAX_TOP_K = 15
 
@@ -543,7 +543,7 @@ Rules:
 6. Answer the user's question directly.
 7. Keep answers concise unless more explanation is needed.
 8. Do not duplicate answers from multiple sources. If multiple sources support the same answer, you may combine them into a single answer.
-9. For study plans, curricula, or course lists, include ALL semesters
+9. For study plans, curricula, curriculum, or course lists, include ALL semesters
   available in the context.
 10. Do not omit semesters unless the user specifically asks for only
   certain semesters.
@@ -609,11 +609,11 @@ Answer using only the retrieved information above.
     with torch.no_grad():
         output = model.generate(
             **inputs,
-            max_new_tokens=800,
+            max_new_tokens=1200,
             # Qwen3 warns that greedy decoding can cause endless repetition.
             # Use its recommended sampling settings for non-thinking mode.
             do_sample=True,
-            temperature=0.7,
+            temperature=0.2,
             top_p=0.8,
             top_k=20,
             min_p=0.0,
