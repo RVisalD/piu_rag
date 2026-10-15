@@ -105,13 +105,6 @@ def load_chunks():
 
 def get_embedding_text(chunk):
 
-    embedding_text = chunk.get(
-        "embedding_text"
-    )
-
-    if embedding_text:
-        return embedding_text.strip()
-
     title = chunk.get(
         "title",
         "",

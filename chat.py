@@ -55,6 +55,8 @@ EMBEDDING_MODEL = (
 )
 
 TOP_K = 3
+EXPANDED_TOP_K = 6
+MAX_TOP_K = 15
 
 # Start permissive.
 # Tune this after testing your real questions.
@@ -66,6 +68,16 @@ NEIGHBOR_WINDOW = 1
 
 # Keep the last four complete exchanges in memory for this session.
 MAX_HISTORY_TURNS = 4
+
+
+def choose_top_k(question):
+    """Use fewer retrieved chunks for focused questions and more for broad ones."""
+    normalized = question.casefold()
+    if re.search(r"\b(all|every|each|complete|entire|list|compare)\b", normalized):
+        return MAX_TOP_K
+    if re.search(r"\b(and|also|plus|along with|as well as)\b", normalized):
+        return EXPANDED_TOP_K
+    return TOP_K
 
 
 def build_search_question(question, history):
@@ -214,7 +226,6 @@ LEXICAL_POSTINGS = {}
 for idx, chunk in enumerate(chunks):
     searchable = " ".join([
         chunk.get("title", ""),
-        chunk.get("embedding_text", ""),
         chunk.get("text", ""),
     ])
     toks = _tokens(searchable)
@@ -259,7 +270,6 @@ def _role_boost(question, chunk):
     q = " ".join(_tokens(question))
     haystack = " ".join([
         chunk.get("title", ""),
-        chunk.get("embedding_text", ""),
         chunk.get("text", ""),
     ]).lower()
 
@@ -474,7 +484,8 @@ def answer_question(question, history=None):
 
     # 1. Search
     results = retrieve(
-        build_search_question(question, history)
+        build_search_question(question, history),
+        top_k=choose_top_k(question),
     )
 
     if not results:
@@ -507,22 +518,23 @@ Rules:
 
 1. Do not invent facts.
 2. Do not guess.
-3. Use the title and information together.
-4. If the information does not support the answer, say:
+3. If asked who you are, say: "I am ParagonU ChatBot, and I am here to help you answer questions relating to Paragon University."
+4. Use the title and information together.
+5. If the information does not support the answer, say:
    "I could not verify that from the available Paragon International University information."
-5. Answer the user's question directly.
-6. Keep answers concise unless more explanation is needed.
-7. For study plans, curricula, or course lists, include ALL semesters
+6. Answer the user's question directly.
+7. Keep answers concise unless more explanation is needed.
+8. For study plans, curricula, or course lists, include ALL semesters
   available in the context.
-8. Do not omit semesters unless the user specifically asks for only
+9. Do not omit semesters unless the user specifically asks for only
   certain semesters.
-9. If there are multiple points to the answer, present them as a numbered list or bullet points.
-10. Do not mention embeddings, FAISS, vector databases,
+10. If there are multiple points to the answer, present them as a numbered list or bullet points.
+11. Do not mention embeddings, FAISS, vector databases,
    retrieval scores, chunks, or internal implementation.
-11. If multiple retrieved sources conflict, do not choose
+12. If multiple retrieved sources conflict, do not choose
     one by guessing. State that the available information
    appears inconsistent.
-12. Use conversation history to understand follow-up questions.
+13. Use conversation history to understand follow-up questions.
     Previous assistant answers are not verified sources. Ground university
     facts in the retrieved information for the current turn.
 """.strip()
