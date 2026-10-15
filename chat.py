@@ -70,6 +70,18 @@ NEIGHBOR_WINDOW = 1
 MAX_HISTORY_TURNS = 4
 
 
+def detect_intent(question):
+    """Handle standalone greetings; send substantive questions to search."""
+    normalized = " ".join(re.findall(r"\w+", question.casefold()))
+    if normalized in {
+        "hi", "hello", "hey", "hi there", "hello there",
+        "good morning", "good afternoon", "good evening",
+        "helloooo", "hi hi", "hey hey", "greetings",
+    }:
+        return "greeting"
+    return "search"
+
+
 def choose_top_k(question):
     """Use fewer retrieved chunks for focused questions and more for broad ones."""
     normalized = question.casefold()
@@ -479,6 +491,12 @@ Information:
 # =====================================================
 
 def answer_question(question, history=None):
+
+    if detect_intent(question) == "greeting":
+        return (
+            "Hello! What would you like to know about Paragon International University?",
+            [],
+        )
 
     history = (history or [])[-2 * MAX_HISTORY_TURNS:]
 
