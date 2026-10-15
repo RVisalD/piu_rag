@@ -44,6 +44,11 @@
     .message { max-width: 760px; margin: 0 auto 22px; animation: arrive .24s ease-out both; }
     .message .label { margin-bottom: 7px; color: var(--brand); font-size: 10px; font-weight: 750; letter-spacing: .12em; }
     .message .body { color: #263b39; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.75; }
+    .table-scroll { max-width: 100%; overflow-x: auto; margin: 12px 0; white-space: normal; }
+    .table-scroll:focus-visible { outline: 2px solid var(--brand); }
+    .table-scroll table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .table-scroll th, .table-scroll td { padding: 9px 12px; border: 1px solid #d8dfeb; text-align: left; vertical-align: top; min-width: 120px; }
+    .table-scroll th { background: #edf1f7; font-weight: 700; }
     .message.user { max-width: min(76%, 590px); margin-right: max(0px, calc((100% - 760px) / 2)); padding: 13px 16px; border: 1px solid #d8dfeb; border-radius: 4px; background: #edf1f7; }
     .message.user .label { color: #52617d; }
     .message.assistant { padding: 8px 18px 8px 16px; border-left: 2px solid var(--accent); }
@@ -126,6 +131,67 @@
     let busy = false;
 
     function scrollToEnd() { conversation.scrollTop = conversation.scrollHeight; }
+
+    // Build DOM nodes from text only: model output never becomes executable HTML.
+    function appendInline(parent, text) {
+      text.split(/(\*\*[^*]+\*\*)/g).forEach(part => {
+        if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+          const strong = document.createElement('strong');
+          strong.textContent = part.slice(2, -2);
+          parent.append(strong);
+        } else {
+          parent.append(document.createTextNode(part));
+        }
+      });
+    }
+
+    function tableCells(line) {
+      return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+    }
+
+    function renderAnswer(body, content) {
+      const lines = content.replace(/\r\n?/g, '\n').split('\n');
+      for (let i = 0; i < lines.length;) {
+        const headers = tableCells(lines[i]);
+        const separators = i + 1 < lines.length ? tableCells(lines[i + 1]) : [];
+        if (lines[i].includes('|') && headers.length > 1 &&
+            separators.length === headers.length && separators.every(cell => /^:?-{3,}:?$/.test(cell))) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'table-scroll';
+          wrapper.tabIndex = 0;
+          wrapper.setAttribute('role', 'region');
+          wrapper.setAttribute('aria-label', 'Answer table');
+          const table = document.createElement('table');
+          const head = table.createTHead().insertRow();
+          headers.forEach(header => {
+            const cell = document.createElement('th');
+            cell.scope = 'col';
+            appendInline(cell, header);
+            head.append(cell);
+          });
+          const tbody = table.createTBody();
+          i += 2;
+          while (i < lines.length && lines[i].includes('|') && tableCells(lines[i]).length === headers.length) {
+            const row = tbody.insertRow();
+            tableCells(lines[i]).forEach((value, column) => {
+              const cell = row.insertCell();
+              if (separators[column].endsWith(':')) {
+                cell.style.textAlign = separators[column].startsWith(':') ? 'center' : 'right';
+              }
+              appendInline(cell, value);
+            });
+            i++;
+          }
+          wrapper.append(table);
+          body.append(wrapper);
+        } else {
+          appendInline(body, lines[i]);
+          if (i < lines.length - 1) body.append(document.createTextNode('\n'));
+          i++;
+        }
+      }
+    }
+
     function addMessage(role, content) {
       const article = document.createElement('article');
       article.className = 'message ' + role;
@@ -134,7 +200,8 @@
       label.textContent = role === 'user' ? 'YOU' : 'PARAGONU ASSISTANT';
       const body = document.createElement('div');
       body.className = 'body';
-      body.textContent = content;
+      if (role === 'assistant') renderAnswer(body, content);
+      else body.textContent = content;
       article.append(label, body);
       messages.append(article);
       scrollToEnd();
