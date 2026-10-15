@@ -92,6 +92,66 @@ def choose_top_k(question):
     return TOP_K
 
 
+def clarify_program_question(question, history, records):
+    """Resolve degree-level ambiguity before retrieval or model generation."""
+    subjects = {
+        "Computer Science": r"\b(computer science|cs)\b",
+        "Management of Information Systems": r"\b(management of information systems|mis)\b",
+        "Economics": r"\beconomics\b",
+        "International Relations": r"\b(international relations|ir)\b",
+        "Educational Leadership": r"\beducational leadership\b",
+    }
+    level_patterns = {
+        "undergraduate": r"\b(undergraduate|bachelor(?:'s|s)?|bsc|b a|b s)\b",
+        "master's": r"\b(master(?:'s|s)?|msc|m sc|mba)\b",
+        "PhD": r"\b(ph\.?d\.?|doctorate|doctoral|doctor of philosophy)\b",
+    }
+    subject = next((name for name, pattern in subjects.items()
+                    if re.search(pattern, question, re.I)), None)
+    levels = [name for name, pattern in level_patterns.items()
+              if re.search(pattern, question, re.I)]
+    # A short reply to our clarification must carry its subject into retrieval.
+    previous = history[-1] if history else {}
+    if not subject and levels and previous.get("role") == "assistant":
+        content = previous.get("content", "")
+        for name in subjects:
+            if content.startswith(f"Which study level are you interested in for {name}:"):
+                return f"{question} in {name}", None
+    if not subject or levels or re.search(
+        r"\b(compare|comparison|all levels|all degrees|all programs|every level|across levels)\b",
+        question, re.I,
+    ):
+        return question, None
+    # Ask only for program information, not staff or subject-level questions.
+    if not re.search(r"\b(tell me about|program|programme|degree|study|studying|curriculum|courses|admission|tuition|fees|overview)\b", question, re.I):
+        return question, None
+    if re.search(r"\b(head|dean|lecturer|professor|staff)\b", question, re.I):
+        return question, None
+    for message in reversed(history):
+        if message.get("role") == "user":
+            content = message.get("content", "")
+            if re.search(subjects[subject], content, re.I):
+                prior_levels = [name for name, pattern in level_patterns.items()
+                                if re.search(pattern, content, re.I)]
+                if len(prior_levels) == 1:
+                    return f"{question} ({prior_levels[0]} level)", None
+                break
+    available = set()
+    for record in records:
+        title = record.get("title", "")
+        text = record.get("text", "")
+        if re.search(subjects[subject], title, re.I) and re.search(r"\bmajor\b", title, re.I):
+            available.add("undergraduate")
+        for label, pattern in level_patterns.items():
+            # Degree and subject must be adjacent, avoiding unrelated biographies.
+            if re.search(pattern + r"\s+(?:degree\s+)?(?:in\s+)?" + re.escape(subject), title + " " + text, re.I):
+                available.add(label)
+    options = [label for label in level_patterns if label in available]
+    if len(options) > 1:
+        return question, f"Which study level are you interested in for {subject}: " + ", ".join(options) + "?"
+    return question, None
+
+
 def build_search_question(question, history):
     """Add recent conversation context to referential follow-ups without an LLM call."""
     follow_up = re.search(
@@ -500,9 +560,19 @@ def answer_question(question, history=None):
 
     history = (history or [])[-2 * MAX_HISTORY_TURNS:]
 
+    resolved_question, clarification = clarify_program_question(question, history, chunks)
+    if clarification:
+        return clarification, []
+    if resolved_question != question:
+        question = resolved_question
+        # The resolved query already contains the subject and degree level.
+        search_question = question
+    else:
+        search_question = build_search_question(question, history)
+
     # 1. Search
     results = retrieve(
-        build_search_question(question, history),
+        search_question,
         top_k=choose_top_k(question),
     )
 
@@ -544,7 +614,7 @@ Rules:
 7. Keep answers concise unless more explanation is needed.
 8. Do not duplicate answers from multiple sources. If multiple sources support the same answer, you may combine them into a single answer.
 9. For study plans, curricula, or course lists, include ALL semesters
-  available in the context.
+  available in the context and make it into a table format.
 10. Do not omit semesters unless the user specifically asks for only
   certain semesters.
 11. If there are multiple points to the answer, use a numbered list or
@@ -567,6 +637,20 @@ Rules:
 15. Use conversation history to understand follow-up questions.
     Previous assistant answers are not verified sources. Ground university
     facts in the retrieved information for the current turn.
+16. Distinguish undergraduate, master's, and doctoral programs. Never combine
+    their curricula, fees, or admission requirements into a single program.
+    When a program question does not specify the study level, check the
+    conversation history. If the level is still unclear and the retrieved
+    information includes multiple levels for that subject, ask one short
+    clarification question instead of describing the programs.
+    Example: User: "Tell me about Computer Science."
+    Assistant: "Are you interested in the undergraduate Computer Science
+    program, the master's, or the PhD?"
+    Offer only program options supported by the retrieved information.
+    If the user replies with a level, combine it with the previous subject
+    and answer about that program only, using the current retrieved evidence.
+    Do not ask again if the level is already clear. Do not ask for a single
+    level when the user explicitly requests all levels or a comparison.
 """.strip()
 
     user_prompt = f"""
@@ -609,7 +693,7 @@ Answer using only the retrieved information above.
     with torch.no_grad():
         output = model.generate(
             **inputs,
-            max_new_tokens=800,
+            max_new_tokens=1200,
             # Qwen3 warns that greedy decoding can cause endless repetition.
             # Use its recommended sampling settings for non-thinking mode.
             do_sample=True,
